@@ -1,0 +1,26 @@
+{
+    "id": "52C950BC",
+    "path": "~/GitHub/vineyard_diversity/bioperm/R/get_perm_pvals.R",
+    "project_path": "R/get_perm_pvals.R",
+    "type": "r_source",
+    "hash": "4215570474",
+    "contents": "",
+    "dirty": false,
+    "created": 1617056450483.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "tempName": "Untitled1",
+        "cursorPosition": "31,13",
+        "scrollLine": "3",
+        "ignored_words": "dataframe\n"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1618243445,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1618243445237,
+    "read_only": false,
+    "read_only_alternatives": []
+}

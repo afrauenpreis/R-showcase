@@ -1,0 +1,25 @@
+{
+    "id": "48721C34",
+    "path": "~/GitHub/vineyard_diversity/bioperm/R/calculate_pvals.R",
+    "project_path": "R/calculate_pvals.R",
+    "type": "r_source",
+    "hash": "3634327902",
+    "contents": "",
+    "dirty": false,
+    "created": 1617055451708.0,
+    "source_on_save": false,
+    "relative_order": 3,
+    "properties": {
+        "tempName": "Untitled1",
+        "cursorPosition": "17,28",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1617552239,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1617552239904,
+    "read_only": false,
+    "read_only_alternatives": []
+}

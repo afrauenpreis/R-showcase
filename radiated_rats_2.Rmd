@@ -1,0 +1,284 @@
+---
+title: "radiated_rats_2"
+author: "Andrew Frauenpreis"
+date: "7/21/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+library(readxl)
+library(here)
+library(gt)
+library(survival)
+library(survminer)
+library(ggalluvial)
+
+data <- read_excel(here::here("Data", "LTS Survival Dataset.xlsx"), sheet = 2)
+data_2 <- read_csv(here::here("Data", "status_by_day-lt.csv"))
+data_2$Treatment <- as.character(data_2$Treatment)
+data_2$Radiation <- as.character(data_2$Radiation)
+data$Treatment <- as.character(data$Treatment)
+data$Radiation <- as.character(data$Radiation)
+```
+
+```{r}
+temp_2 <- data %>%
+  mutate(
+    `Survival Group` = fct_recode(as.character(`Survival Group`),
+      Died = "0",
+      Lived = "2",
+      Euth = "3",
+      f30_Euth = "1"
+    ),
+    Treatment = factor(Treatment),
+    Injections = fct_recode(Treatment,
+      vehicle = "2",
+      vehicle = "3",
+      BPI = "4",
+      BPI = "5",
+      None = "1",
+      None = "0"
+    ),
+    ENR_Pro = Treatment %in% c("3", "5"),
+    Irradiated = Treatment != 0,
+    Experiment = factor(Experiment),
+    Radiation = factor(Radiation),
+    Radiation = fct_recode(Radiation,
+        `0 Gy` = "0",
+        `6.25 Gy` = "1",
+        `6.5 Gy` = "2",
+        `7 Gy` = "3"
+      )
+  )
+```
+
+```{r}
+km_temp <- temp_2 %>%
+  mutate(
+    status = as.integer(`Survival Group` == "Died")
+    )
+```
+
+```{r}
+km_temp <- km_temp %>% 
+  filter(`Days Survived` > 30)
+fit <- survfit(Surv(`Days Survived`, status) ~ 1, data = km_temp)
+
+ggsurvplot(fit, 
+           pval = TRUE,
+           palette = c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"))
+```
+
+```{r}
+fit <- survfit(Surv(`Days Survived`, status) ~ Injections, data = km_temp)
+
+ggsurvplot(fit, 
+           pval = TRUE,
+           palette = c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"))
+```
+
+```{r}
+fit <- survfit(Surv(`Days Survived`, status) ~ Radiation, data = km_temp)
+
+ggsurvplot(fit, 
+           pval = TRUE,
+           palette = c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7"))
+```
+
+```{r}
+km_temp <- km_temp %>% 
+  filter(Radiation != "0 Gy",
+         Injections != "None")
+
+fit <- survfit(Surv(`Days Survived`, status) ~ Radiation + Injections, data = km_temp)
+
+test <- ggsurvplot(fit, 
+           pval = TRUE,
+           palette = c("cornflowerblue", "#FFCC33", "blue", "#FF9900", "darkblue", "#CC6600"))
+
+test 
+```
+
+```{r}
+test_data <- test$data.survtable
+
+output <- lm(pct.risk ~ time + Radiation + Injections, data = test_data)
+
+output
+
+anova(output)
+
+test_data %>% 
+  ggplot(mapping = aes(x = time, y = pct.risk,color = Radiation)) +
+  geom_smooth(method = "lm", se = FALSE) + 
+  facet_wrap(~Injections)
+
+test_data %>% 
+  ggplot(mapping = aes(x = time, y = pct.risk)) +
+  geom_point()
+```
+```{r}
+temp_2 <- data %>%
+  mutate(
+    `Survival Group` = fct_recode(as.character(`Survival Group`),
+      Died = "0",
+      Lived = "2",
+      Euth = "3",
+      f30_Euth = "1"
+    ),
+    Treatment = factor(Treatment),
+    Injections = fct_recode(Treatment,
+      vehicle = "2",
+      vehicle_ENRPO = "3",
+      BPI = "4",
+      BPI_ENRPO = "5",
+      None = "1",
+      None = "0"
+    ),
+    ENR_Pro = Treatment %in% c("3", "5"),
+    Irradiated = Treatment != 0,
+    Experiment = factor(Experiment),
+    Radiation = factor(Radiation),
+    Radiation = fct_recode(Radiation,
+        `0 Gy` = "0",
+        `6.25 Gy` = "1",
+        `6.5 Gy` = "2",
+        `7 Gy` = "3"
+      )
+  )
+
+km_temp <- temp_2 %>%
+  mutate(
+    status = as.integer(`Survival Group` == "Died")
+    )
+
+fit <- survfit(Surv(`Days Survived`, status) ~ Radiation + Injections, data = km_temp)
+
+test <- ggsurvplot(fit, 
+           pval = TRUE,
+           palette = c("cornflowerblue", "#FFCC33", "blue", "#FF9900", "darkblue", "#CC6600"))
+
+test_data <- test$data.survtable
+
+output <- lm(n.risk ~ time + Radiation + Injections, data = test_data)
+
+output
+
+anv_output <- anova(output)
+
+anv_output
+
+TukeyHSD(aov(n.risk ~ time + Radiation + Injections, data = test_data), "Injections", ordered = TRUE)
+
+test_data %>% 
+  ggplot(mapping = aes(x = time, y = n.risk,color = Radiation)) +
+  geom_smooth(method = "lm", se = FALSE) + 
+  facet_wrap(~Injections)
+
+```
+
+```{r}
+data_2 <- data_2  %>% 
+    mutate(
+      Treatment = fct_recode(Treatment,
+        `Control` = "0",
+        `No Treatment` = "1",
+        `Vehicle Injections` = "2", 
+        `Vehicle Injections and ENR PO` = "3",
+        `BPI Injections` = "4",
+        `BPI Injections and ENR PO` = "5"
+      ),
+      Radiation = fct_recode(Radiation,
+        `0 Gy` = "0",
+        `6.25 Gy` = "1",
+        `6.5 Gy` = "2",
+        `7 Gy` = "3"
+      ))
+```
+
+```{r}
+temp <- data_2
+#do in a grid style, leave out control and no treatment 
+temp <- temp %>%
+  filter(Radiation == "6.5 Gy") %>% 
+  filter(Treatment != "Control",
+         Treatment != "No Treatment") %>% 
+  rename(`Percent Alive or Dead` = n) 
+
+temp$r_Treatment <- factor(temp$Treatment, levels = c("Vehicle Injections", "BPI Injections", "Vehicle Injections and ENR PO", "BPI Injections and ENR PO" ))
+
+temp %>% 
+  ggplot(aes(x = Day, y = `Percent Alive or Dead`, fill = Status)) +
+  geom_col(position = "fill") +
+  facet_wrap(~r_Treatment) +
+  scale_fill_manual(values = c("#009E73", "#999999", "#E69F00"))
+```
+
+```{r}
+data_2 %>%
+  filter(Status != "Healthy Euth",
+         Radiation != "0 Gy") %>%
+  rename(`Percent Alive or Dead` = n) %>% 
+  ggplot(aes(x = Day, y = `Percent Alive or Dead`, fill = Status)) +
+  geom_col(position = "fill") +
+  facet_wrap(~Radiation) +
+  scale_fill_manual(values = c("#009E73", "#999999"))
+```
+
+```{r}
+temp <- data_2 %>% 
+  filter(Day %% 100 == 0 | Day == 1) %>% 
+  rename(Count = n) %>% 
+  mutate(
+      Day = paste("Day", Day),
+      Treatment = fct_recode(Treatment,
+        vehicle = "2",
+      vehicle = "3",
+      BPI = "4",
+      BPI = "5",
+      None = "1",
+      None = "0"
+      ),
+      Radiation = fct_recode(Radiation,
+        `0 Gy` = "0",
+        `6.25 Gy` = "1",
+        `6.5 Gy` = "2",
+        `7 Gy` = "3"
+      )
+    )
+temp$Day <- as.character(temp$Day)
+```
+
+```{r}
+temp %>% 
+  filter(Status != 	"Healthy Euth",
+         Radiation != "0 Gy",
+         Treatment != "None") %>% 
+  ggplot(mapping = aes(axis1 = Treatment, axis2 = Day, axis3 = Status, y = Count)) +
+  scale_x_discrete(limits = c("Radiation", "Treatment", "Day"), expand = c(.2, .05)) +
+  xlab("Experiment") +
+  geom_alluvium(aes(fill = Radiation)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_minimal() + 
+  scale_fill_manual(values = c("green", "blue", "black"))
+```
+```{r}
+temp %>% 
+  filter(Status != 	"Healthy Euth",
+         Radiation != "0 Gy",
+         Treatment != "None") %>% 
+  ggplot(mapping = aes(axis1 = Treatment, axis2 = Status, y = Count)) +
+  scale_x_discrete(limits = c("Treatment", "Status"), expand = c(.2, .05)) +
+  xlab("Experiment") +
+  geom_alluvium(aes(fill = Radiation)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_minimal() + 
+  scale_fill_manual(values = RColorBrewer::brewer.pal(3, "Blues"))
+```
+

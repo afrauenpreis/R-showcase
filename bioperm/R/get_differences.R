@@ -1,0 +1,19 @@
+#' Calculates the differences between two columns.
+#'
+#' @param data The data frame
+#' @param col1 the column to be subtracted from
+#' @param col2 the column to be subtracted by
+#' the function will do col1 - col2
+#'
+#' @import dplyr
+#' @importFrom glue glue
+#'
+#' @return A mutated dataframe containing the differences between column i and l
+#'
+#' @export
+#'
+get_differences <- function(data, col1, col2){
+  data %>%
+    dplyr::mutate(treat_diff = !!col1[[1]] - !!col2[[1]]) %>%               #calculate difference between column i and column
+    dplyr::mutate(`x1-x2` = glue("{col1[1]}-{col2[1]}"))                    #glue pastes the difference column names together
+}

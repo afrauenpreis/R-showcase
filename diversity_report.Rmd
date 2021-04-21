@@ -1,0 +1,190 @@
+---
+title: "diversity_report"
+author: "Andrew Frauenpreis"
+date: "12/5/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+```{r, include=FALSE}
+library(tidyverse)
+library(gganimate)
+library(here)
+library(gt)
+data <- read_csv(here("Data", "2018_counts_cleaned.csv"))
+```
+
+Firstly, the Shannon index scores were calculated using the the species level and tested. Next an AOV was ran to test if season, treatment, or the season:treatment interaction had a significant effect on the diversity index. From this analysis I found Bud was significantly lower in diversity than the other seasons. Furthermore, I found treatment was significant overall and more specifically in the instances listed below. Lastly, there was a significant interaction between the treatment and the season. 
+
+```{r, echo=FALSE, warning=FALSE}
+shannon_scores <- data %>% 
+  mutate(Count = Count / 100) %>% 
+  group_by(Kingdom, Phylum, Class, Order, Family, Genus, Species, season, treatment, plot) %>%
+  summarise(Count = sum(Count)) %>% 
+  mutate(shannon_index = Count * log(Count)) %>%
+  replace_na(list(shannon_index = 0)) %>% 
+  group_by(season, treatment, plot) %>% 
+  summarise(shannon_index = -sum(shannon_index)) %>% 
+  arrange(desc(shannon_index))
+
+shannon_aov <- aov(shannon_index ~ season * treatment, data = shannon_scores)
+
+Tukeys <- TukeyHSD(shannon_aov)
+
+sig_treatments <- as.data.frame(Tukeys$`treatment`) 
+
+sig_treatments <- sig_treatments %>% 
+  filter(`p adj` <= 0.05) %>%
+  rownames_to_column("treatments") %>% 
+  select(treatments, diff, `p adj`) %>% 
+  arrange(desc(diff))
+
+sig_treatment_gt <- sig_treatments %>%
+  gt() %>%
+  tab_header(title = md("**Significant Treatment Comparisons**"),
+             subtitle = md("*At the Species level*")) %>% 
+  tab_options(column_labels.background.color = "#999999") %>% 
+  tab_style(style = list(
+    cell_fill(color = "wheat1")
+  ),
+  locations = cells_body(columns = vars(diff))
+  ) %>% 
+  tab_style(style = list(
+    cell_fill(color = "wheat")
+  ),
+  locations = cells_body(columns = vars(`p adj`))
+  )
+
+sig_treatment_gt
+
+season_treatment <- as.data.frame(Tukeys$`season:treatment`) 
+
+season_treatment <- season_treatment %>% 
+  filter(`p adj` <= 0.05) %>%
+  rownames_to_column("comparisons") %>% 
+  select(comparisons, diff, `p adj`) %>% 
+  arrange(desc(diff))
+
+season_treatment_gt <- season_treatment %>%
+  gt() %>%
+  tab_header(title = md("**Significant Interaction Comparisons**"),
+             subtitle = md("*At the Species level*")) %>% 
+  tab_options(column_labels.background.color = "#999999") %>% 
+  tab_style(style = list(
+    cell_fill(color = "wheat1")
+  ),
+  locations = cells_body(columns = vars(diff))
+  ) %>% 
+  tab_style(style = list(
+    cell_fill(color = "wheat")
+  ),
+  locations = cells_body(columns = vars(`p adj`))
+  )
+
+season_treatment_gt
+```
+
+The boxplot below displays how each treatment preformed by season. 
+
+```{r, echo=FALSE}
+shannon_scores %>% 
+  ggplot(mapping = aes(x = treatment, y = shannon_index, fill = season)) + 
+  geom_boxplot() +
+  theme_classic() +
+  facet_wrap(~season) +
+  labs(title = "Species level Diversity Index by Treatment and Season") +
+  xlab("Treatment") + 
+  ylab("Shannon Diversity Index") 
+
+```
+ 
+The lineplot below makes the interactions easier to see. 
+
+```{r, echo=FALSE}
+shannon_scores %>% 
+  group_by(season, treatment) %>% 
+  summarise(shannon_index = mean(shannon_index)) %>% 
+  ggplot(mapping = aes(x = treatment, y = shannon_index, color = season, group = season)) + 
+  geom_point() + 
+  geom_line() +
+  theme_classic() +
+  labs(title = "Species level Diversity Index by Treatment and Season") +
+  xlab("Treatment") + 
+  ylab("Shannon Diversity Index")  
+```
+
+The below analysis is similar to the above except it only goes down to the level of order for calculating the Shannon indexes. There is not treatment table for this analysis since treatment was not significant at the order level but season and the interaction were. 
+
+```{r, echo=FALSE}
+shannon_scores <- data %>% 
+  mutate(Count = Count / 100) %>% 
+  group_by(Kingdom, Phylum, Class, Order, season, treatment, plot) %>%
+  summarise(Count = sum(Count)) %>% 
+  mutate(shannon_index = Count * log(Count)) %>%
+  replace_na(list(shannon_index = 0)) %>% 
+  group_by(season, treatment, plot) %>% 
+  summarise(shannon_index = -sum(shannon_index)) %>% 
+  arrange(desc(shannon_index))
+
+shannon_aov <- aov(shannon_index ~ season * treatment, data = shannon_scores)
+
+Tukeys <- TukeyHSD(shannon_aov)
+
+season_treatment <- as.data.frame(Tukeys$`season:treatment`) 
+
+season_treatment <- season_treatment %>% 
+  filter(`p adj` <= 0.05) %>%
+  rownames_to_column("comparisons") %>% 
+  select(comparisons, diff, `p adj`) %>% 
+  arrange(desc(diff))
+
+season_treatment_gt <- season_treatment %>%
+  gt() %>%
+  tab_header(title = md("**Significant Interaction Comparisons**"),
+             subtitle = md("*At the Orderlevel*")) %>% 
+  tab_options(column_labels.background.color = "#999999") %>% 
+  tab_style(style = list(
+    cell_fill(color = "wheat1")
+  ),
+  locations = cells_body(columns = vars(diff))
+  ) %>% 
+  tab_style(style = list(
+    cell_fill(color = "wheat")
+  ),
+  locations = cells_body(columns = vars(`p adj`))
+  )
+
+season_treatment_gt
+
+```
+
+The boxplot below displays how each treatment preformed by season. 
+
+```{r, echo=FALSE}
+shannon_scores %>% 
+  ggplot(mapping = aes(x = treatment, y = shannon_index, fill = season)) + 
+  geom_boxplot() +
+  theme_classic() +
+  facet_wrap(~season) +
+  labs(title = "Order level Diversity Index by Treatment and Season") +
+  xlab("Treatment") + 
+  ylab("Shannon Diversity Index") 
+
+```
+ 
+The lineplot below makes the interactions easier to see. 
+
+```{r, echo=FALSE}
+shannon_scores %>% 
+  group_by(season, treatment) %>% 
+  summarise(shannon_index = mean(shannon_index)) %>% 
+  ggplot(mapping = aes(x = treatment, y = shannon_index, color = season, group = season)) + 
+  geom_point() + 
+  geom_line() +
+  theme_classic() +
+  labs(title = "Order level Diversity Index by Treatment and Season") +
+  xlab("Treatment") + 
+  ylab("Shannon Diversity Index") 
+```

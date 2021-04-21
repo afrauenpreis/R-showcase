@@ -1,0 +1,281 @@
+---
+title: "Untitled"
+author: "Kelly Bodwin"
+date: "1/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include = FALSE}
+library(tidyverse)
+library(stringr)
+library(readxl)
+library(here)
+```
+
+```{r}
+library(dbplyr)
+library(odbc)
+library(DBI)
+library(RMySQL)
+library(rsample)
+library(glue)
+```
+
+`dbplyr` is the one that lets you use `dplyr` R code to sneakily run SQL queries.  
+
+The rest of them are just "some packages I need for SQL" and I haven't bothered to understand what tasks each one covers, or even which of the functions I'm about to use come from which package.
+
+
+```{r}
+con <- dbConnect(RMySQL::MySQL(), 
+                 user='kbodwin', 
+                 password='vineyard', 
+                 dbname='vineyard_diversity',
+                 host='vineyard-project.cnmgssyjqpsv.us-west-1.rds.amazonaws.com',
+                 port=3306)
+
+
+```
+
+This will show you what datasets are available in the database:
+
+I changed this to used DBL's since the dplyr one was not working for me and I found a thread with hadley recommending this version. 
+
+```{r}
+dbListTables(con)
+```
+
+This will look like it makes a dataset in R, but in fact, it's just a pointer to a connection:
+
+```{r}
+df <- tbl(con, "Counts_by_Class")
+
+df %>% arrange(desc(Class))
+```
+
+To get the dataset into R, you use `collect()`:
+
+```{r}
+counts_by_class <- df %>% collect()
+```
+
+The goal here is to "outsource" as much of the large-scale computation as possible to SQL, before collecting to R.
+
+I think the best approach is to pre-establish the permutation rules, and then make SQL do the grouping and summarizing.
+
+Something like:
+
+```{r}
+df %>%
+  mutate(
+    Experiment = case_when(
+      treatment %in% c("NF", "OF", "SF") ~ "Fert",
+      treatment %in% c("HERB", "NH") ~ "Herb",
+      treatment %in% c("NCC", "HWD", "LWD") ~ "CC"
+    )) %>%
+  group_by(Experiment, season, year, Class) %>%
+  # mutate(
+  #   num = tally(),
+  #   labels = sample(1:n, n)
+  # ) %>%
+  show_query()
+```
+
+(https://cran.r-project.org/web/packages/tidypredict/vignettes/sql.html)
+
+
+
+```{r}
+# Goals of get_perm_pvals
+## The function iterate across all selected treatement columns 
+## For the function to not repeat itself more then necessary, 
+### for example if A is compared to B, B does not need to be comapred to A
+## For the final output to be a dataframe containing all comparisons and p-values 
+# General Notes
+## data must include permutation 0 
+
+get_perm_pvals <- function(data, class, ...){
+  pvals <- data.frame() #initializes an empty dataframe
+  col_vars <- quos(...)
+  for(i in 1:length(col_vars)){    #iterates across list of treatments
+    for(l in (i+1):length(col_vars)){   #iterates across list of treatments again
+      if(l > length(col_vars)){
+        return(pvals)
+      }
+      pvals_temp <- data %>%   
+        mutate_if(is.numeric, ~replace_na(., 0)) %>%
+        mutate(treat_diff = (!!!col_vars[i]) - (!!!col_vars[l]))
+      pvals_temp <- pvals_temp %>% #creates difference column for each pair
+        mutate(`x1-x2` = glue("{col_vars[i]}-{col_vars[l]}"))
+      pvals_temp <- pvals_temp %>%                                        #creates column for each treatment pair
+        group_by(season, {{class}}) %>%                       
+        summarize(
+          p_val = (sum(abs(treat_diff) >= abs(treat_diff[1]))-1)/1000,  # minus one because the real data equals itself
+          treat_diff = treat_diff[1],
+          `x1-x2` = `x1-x2`[1]) %>%
+        arrange(p_val, treat_diff)
+      pvals <- bind_rows(pvals_temp, pvals)
+    }
+  }
+  return(pvals)
+}
+
+```
+
+```{r}
+add_Perm_ID <- function(perm_dat){
+  new_perm <- NULL
+  for(i in 1:nrow(perm_dat)){
+   temp <- perm_dat$splits[[i]] %>% 
+      analysis() %>% 
+      mutate(Perm = perm_dat$id[i])
+   new_perm <- rbind(new_perm, temp)
+  }
+  return(new_perm)
+}
+```
+
+```{r}
+class_df <- df %>% 
+  filter(treatment %in% c("NF", "OF", "SF"),
+         season == "Bloom") %>% 
+  group_by(Class, treatment, season) %>%
+  summarize(count = sum(Count)) %>% 
+  collect()
+
+class_df <- class_df %>% 
+  pivot_wider(names_from = treatment, values_from = count) 
+```
+
+```{r}
+class_perm <- class_df %>% 
+  permutations(c("SF", "OF", "NF"), times = 1000, apparent = TRUE)
+
+class_perm <- add_Perm_ID(class_perm)
+
+class_perm <- class_perm[order(class_perm$Perm),]
+```
+
+```{r, warning=FALSE}
+#debugonce(get_perm_pvals)
+perm_pvals <- class_perm %>% 
+  get_perm_pvals(class = Class, SF, OF, NF)
+```
+
+```{r}
+perm_pvals %>% 
+  filter(p_val <= 0.05) %>% 
+  arrange(p_val)
+
+perm_pvals$`x1-x2` %>% unique()
+```
+There are 22 significantly different counts by Class for the fertilization treatments in Bloom.  
+
+One optimization that needs to be made is to eliminate self-comparison. Probably just need and if statement in the function. 
+
+
+```{r}
+df <- tbl(con, "Counts_by_Species")
+
+species_df <- df %>% 
+  filter(treatment %in% c("NF", "OF", "SF"),
+         season == "Bloom") %>% 
+  group_by(Species, treatment, season) %>%
+  summarize(count = sum(Count)) %>% 
+  collect()
+
+species_df <- species_df %>% 
+  pivot_wider(names_from = treatment, values_from = count) 
+```
+
+Need to switch to using data.tables, rbinding 1000 semi-large datasets takes way to much time. This piece of code is definitley going to be the bottle neck for the entire process. The code below took about took ~10 mins to run. 
+
+```{r}
+species_perm <- species_df %>% 
+  permutations(c("SF", "OF", "NF"), times = 1000, apparent = TRUE)
+
+tictoc::tic()
+species_perm <- add_Perm_ID(species_perm)
+tictoc::toc()
+
+#To order the dataset from original data down to permutation 1000
+species_perm <- species_perm[order(species_perm$Perm),]
+```
+
+The code below took ~8 mins to run. How to optimize it? 
+```{r, warning=FALSE}
+#debugonce(get_perm_pvals)
+tictoc::tic()
+perm_pvals <- species_perm %>% 
+  get_perm_pvals(class = Species, SF, OF, NF)
+tictoc::toc()
+```
+
+```{r}
+perm_pvals %>% 
+  filter(p_val <= 0.05) %>% 
+  arrange(p_val)
+
+perm_pvals$`x1-x2` %>% unique()
+```
+
+```{r}
+df <- tbl(con, "Counts_by_Class")
+
+counts_by_class <- df %>% collect()
+```
+
+```{r}
+actinobacteria_df <- df %>% 
+  filter(treatment %in% c("NF", "OF", "SF"),
+         season == "Bloom",
+         Class == "actinobacteria")  %>% 
+  group_by(Class, treatment, season, sample) %>%
+  summarise(Count = sum(Count)) %>% 
+  collect()
+```
+
+```{r}
+actinobac_perm <- actinobacteria_df %>% 
+  permutations("treatment", times = 1000, apparent = TRUE)
+
+actinobac_perm <- add_Perm_ID(actinobac_perm)
+
+actinobac_perm <- actinobac_perm[order(actinobac_perm$Perm),]
+
+actinobac_perm <- actinobac_perm %>% 
+  group_by(Class, season, treatment, Perm) %>% 
+  summarise(Count = mean(Count)) %>% 
+  pivot_wider(names_from = treatment, values_from = Count) 
+```
+
+```{r, warning=FALSE}
+#debugonce(get_perm_pvals)
+perm_pvals <- actinobac_perm %>% 
+  get_perm_pvals(class = Class, SF, OF, NF)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

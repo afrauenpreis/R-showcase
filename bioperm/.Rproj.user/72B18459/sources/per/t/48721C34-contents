@@ -1,0 +1,24 @@
+#' Calculates the p-values for the permuted data.frame.
+#'
+#' @param data The data frame
+#' @param class The taxonomic level being tested on
+#' @param n the number of permutations
+#'
+#' @return A data.frame containing p-values for the permuted data arranged in ascending order by p-val
+#'
+#' @import dplyr
+#' @import dtplyr
+#' @import data.table
+#' @import magrittr
+#'
+#' @export
+#'
+calculate_pvals <- function(data, taxon, n){
+  data %>%
+    group_by(season, {{taxon}}) %>%
+    summarize(
+      p_val = (sum(abs(treat_diff) >= abs(treat_diff[1]))-1)/n,  #minus one because the real data equals itself
+      treat_diff = treat_diff[1],
+      `x1-x2` = `x1-x2`[1]) %>%
+    arrange(p_val, treat_diff)
+}
